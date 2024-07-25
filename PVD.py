@@ -52,8 +52,7 @@ def validate_args(args): # ensures user has given the correct options, and the n
 def main():
     args = init_commandline_args()
     validate_args(args) # will exit if invalid args
-    cover_image = bitmap()
-    cover_image.read_from_file(args.cover_image)
+    cover_image = bitmap(args.cover_image)
 
 if __name__=="__main__":
     main()
