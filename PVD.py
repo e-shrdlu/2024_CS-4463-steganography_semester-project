@@ -1,3 +1,11 @@
+##################################
+# Authors
+##################################
+# Nat Broyles
+# Chelse Miles
+# Aidan Kollar
+
+
 import argparse
 import os
 import time
@@ -60,6 +68,7 @@ def validate_args(args): # ensures user has given the correct options, and the n
 # using pythons generators will allow us to write logic for iterating through pixel-pairs
 # in different ways, allowing experimentation with different pairs (horizontal vs vertical)
 # and different paths (left->right, top->bottom vs randomly determined with symmetric key, etc)
+# stores pair as ((R,G,B), (R,G,B))
 def pixel_pairs(img): # takes PIL Image object as parameter
     size_x, size_y = img.size
     if pixel_pair_mode == "horizontal":
@@ -79,6 +88,10 @@ def pixel_pairs(img): # takes PIL Image object as parameter
         print("ERROR: pixel pair mode", pixel_pair_mode, "not recognized")
         exit()
 
+def calculate_difference(pixel1, pixel2):
+    # Calculate the difference between 2 RGB pixel values, will be used for determining range to hide in
+    return (abs(pixel1[0] - pixel2[0]), abs(pixel1[1] - pixel2[1]), abs(pixel1[2] - pixel2[2]))
+
 
 
 def main():
@@ -87,6 +100,8 @@ def main():
     cover_image = bitmap(args.cover_image)
     for pixel_pair in pixel_pairs(cover_image.image):
         print(pixel_pair)
+        diff = calculate_difference(*pixel_pair)
+        print(diff)
 
 if __name__=="__main__":
     main()
