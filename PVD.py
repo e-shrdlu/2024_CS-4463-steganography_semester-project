@@ -3,6 +3,13 @@ import os
 import time
 from PIL import Image
 
+# global vars / settings #
+##########################
+
+# placeholders for now, will update generator function to do more later
+pixel_pair_mode = "horizontal"
+pixel_iteration_mode = "standard"
+
 
 # bitmap class #
 ################
@@ -18,7 +25,6 @@ class bitmap:
     def write_to_file(self, filename):
         # TODO
         pass
-
 
 # command line arguments #
 ##########################
@@ -49,10 +55,38 @@ def validate_args(args): # ensures user has given the correct options, and the n
             print("warning: output image", args.output_image, "already exists. You have 1s to cancel...")
             time.sleep(1)
 
+# Image iterating generator thing #
+###################################
+# using pythons generators will allow us to write logic for iterating through pixel-pairs
+# in different ways, allowing experimentation with different pairs (horizontal vs vertical)
+# and different paths (left->right, top->bottom vs randomly determined with symmetric key, etc)
+def pixel_pairs(img): # takes PIL Image object as parameter
+    size_x, size_y = img.size
+    if pixel_pair_mode == "horizontal":
+        if pixel_iteration_mode == "standard":
+            # left to right first, then top to bottom (like reading)
+            # only do odd number x values, then the pair of pixels is x-1,y  x,y
+            for y in range(size_y):
+                for x in range(1,size_x,2): # start with 1, go by twos. gives us only odd numbers.
+                    yield (img.getpixel((x-1, y)), img.getpixel((x, y)))
+        else:
+            print("ERROR: pixel iteration mode", pixel_iteration_mode, "not recognized")
+    elif pixel_pair_mode == "vertical":
+        print("TODO: implement vertical pixel pairs")
+        #TODO
+        exit()
+    else:
+        print("ERROR: pixel pair mode", pixel_pair_mode, "not recognized")
+        exit()
+
+
+
 def main():
     args = init_commandline_args()
     validate_args(args) # will exit if invalid args
     cover_image = bitmap(args.cover_image)
+    for pixel_pair in pixel_pairs(cover_image.image):
+        print(pixel_pair)
 
 if __name__=="__main__":
     main()
