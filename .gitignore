@@ -1,3 +1,10 @@
+# this is githubs premade python .gitignore template, plus a few additions
+
+# my virtual env stuff
+PVD_venv/
+meta
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
