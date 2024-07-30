@@ -137,236 +137,287 @@ def read_message_file(filepath):
     # Convert message to binary string
     return ''.join(format(ord(char), '08b') for char in message)
 
+def find_difference_range(pixel_pair):
+    diff = abs(pixel_pair[0] - pixel_pair[1])
+    # TODO: implement more ranges
+    diff_ranges = [0,8,16,32,64,128,256]
+    for i in range(1, len(diff_ranges)):
+        if diff < diff_ranges[i]:
+            diff_range = list(range(diff_ranges[i-1], diff_ranges[i]))
+            return diff_range
+    print("ERROR: for some reason did not calculate range for diff =", diff)
+
+
+def grayscale_new_vals(pixel_pair, m, diff): # m is new_difference - old_difference
+    # from the paper
+    if diff % 2 == 1: # diff is odd
+        new_vals = (pixel_pair[0] - math.ceil(m/2), pixel_pair[1] + math.floor(m/2))
+    else: # diff is even
+        new_vals = (pixel_pair[0] - math.floor(m/2), pixel_pair[1] + math.ceil(m/2))
+    return new_vals
+
 def embed_data_into_image(cover_image, message_bits, output_file):
     output_image = cover_image.copy()
     msg_index = 0
     msg_length = len(message_bits)
     pixels = output_image.load()
 
+    old_msg_index = 0
+
     for pixel1, pixel2 in pixel_pairs(cover_image):
         if msg_index >= msg_length:
             break
         
-        # Calculate differences for each color channel
-        diff_r = (pixel1[0] - pixel2[0])
-        diff_g = (pixel1[1] - pixel2[1])
-        diff_b = (pixel1[2] - pixel2[2])
-        
-        # Determine embedding capacity based on the difference
-        capacity_r = get_embedding_capacity(diff_r)
-        capacity_g = get_embedding_capacity(diff_g)
-        capacity_b = get_embedding_capacity(diff_b)
-        
-        # Embed data into the differences sequentially
-        # pixels have their dif
-        if msg_index < msg_length and capacity_r > 0:
-            bits_to_embed = message_bits[msg_index:msg_index + capacity_r]
-            if len(bits_to_embed) < capacity_r:
-                bits_to_embed = bits_to_embed.ljust(capacity_r, '0')
-            bits_value = int(bits_to_embed, 2)
-            msg_index += capacity_r
-            print(f"Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
+        if color_mode == "grayscale":
+            diff = calculate_gray_difference(pixel1, pixel2)
+            diff_range = find_difference_range((pixel1, pixel2))
+            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[1] - diff, diff)
+            # from the paper, determine if pixelpair should be skipped:
+            if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
+                # invalid pair
+                print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
+                continue
+
+            capacity = get_embedding_capacity(diff)
+            old_msg_index = msg_index
+            msg_index += capacity
+            if msg_index > msg_length:
+                msg_index = msg_length + 1
+            bits_to_embed = message_bits[old_msg_index:msg_index]
+            if len(bits_to_embed) < capacity:
+                bits_to_embed = bits_to_embed.ljust(capacity, '0')
             
+            bits_value = int(bits_to_embed, 2)
+            print(f"Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
 
-            x = get_log2(abs(diff_r))
-            new_abs_diff = (2 ** x) + bits_value
-            total_change = new_abs_diff - abs(diff_r)
-            print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_r)} to {new_abs_diff} for a total change of {total_change}")
+            x = get_log2(abs(diff))
+            # TODO / BOOKMARK
+            # ^ I'm tired and going to bed lmao but this is where I got on the grayscale, I'll try to do more tmrw
 
-            # If total_change is positive then the difference between the 2 channel values needs to go up.
-            while total_change >= 1:
+
+
+        
+        else:
+            # Calculate differences for each color channel
+            diff_r = (pixel1[0] - pixel2[0])
+            diff_g = (pixel1[1] - pixel2[1])
+            diff_b = (pixel1[2] - pixel2[2])
+            
+            # Determine embedding capacity based on the difference
+            capacity_r = get_embedding_capacity(diff_r)
+            capacity_g = get_embedding_capacity(diff_g)
+            capacity_b = get_embedding_capacity(diff_b)
+            
+            # Embed data into the differences sequentially
+            # pixels have their dif
+            if msg_index < msg_length and capacity_r > 0:
+                bits_to_embed = message_bits[msg_index:msg_index + capacity_r]
+                if len(bits_to_embed) < capacity_r:
+                    bits_to_embed = bits_to_embed.ljust(capacity_r, '0')
+                bits_value = int(bits_to_embed, 2)
+                msg_index += capacity_r
+                print(f"Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
                 
-                if total_change % 2 == 0: 
-                    if pixel1[0] >= pixel2[0]:
-                        if pixel1[0] < 255: 
-                            pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
-                        elif pixel2[0] > 0:
-                            pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-                    else:
-                        if pixel2[0] < 255: 
-                            pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-                        elif pixel1[0] > 0: 
+    
+                x = get_log2(abs(diff_r))
+                new_abs_diff = (2 ** x) + bits_value
+                total_change = new_abs_diff - abs(diff_r)
+                print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_r)} to {new_abs_diff} for a total change of {total_change}")
+    
+                # If total_change is positive then the difference between the 2 channel values needs to go up.
+                while total_change >= 1:
+                    
+                    if total_change % 2 == 0: 
+                        if pixel1[0] >= pixel2[0]:
+                            if pixel1[0] < 255: 
+                                pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
+                            elif pixel2[0] > 0:
+                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
+                        else:
+                            if pixel2[0] < 255: 
+                                pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
+                            elif pixel1[0] > 0: 
+                                    pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
+                    else: 
+                        if pixel1[0] >= pixel2[0]:
+                            if pixel2[0] > 0: 
+                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
+                            elif pixel1[0] < 255:
+                                    pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
+                        else:
+                            if pixel1[0] > 0: 
                                 pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                else: 
-                    if pixel1[0] >= pixel2[0]:
-                        if pixel2[0] > 0: 
-                            pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-                        elif pixel1[0] < 255:
+                            elif pixel2[0] < 255: 
+                                    pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
+    
+                    total_change -= 1
+                    
+                while total_change <= -1:
+    
+                    if total_change % 2 == 0:
+                        if pixel1[0] > pixel2[0]:
+                            if pixel1[0] > 0:
+                                pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
+                            elif pixel2[0] < 255:
+                                pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
+                        else:
+                            if pixel2[0] > 0:
+                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
+                            elif pixel1[0] < 255:
                                 pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
                     else:
-                        if pixel1[0] > 0: 
-                            pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                        elif pixel2[0] < 255: 
+                        if pixel1[0] > pixel2[0]:
+                            if pixel2[0] < 255:
                                 pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-
-                total_change -= 1
-                
-            while total_change <= -1:
-
-                if total_change % 2 == 0:
-                    if pixel1[0] > pixel2[0]:
-                        if pixel1[0] > 0:
-                            pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                        elif pixel2[0] < 255:
-                            pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
+                            elif pixel1[0] > 0:
+                                pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
+                        else:
+                            if pixel1[0] < 255:
+                                pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
+                            elif pixel2[0] > 0:
+                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
+    
+                    total_change += 1
+    
+                print(f"value is {pixel1[0]} and {pixel2[0]} after mod")
+    
+            if msg_index < msg_length and capacity_g > 0:
+                bits_to_embed = message_bits[msg_index:msg_index + capacity_g]
+                if len(bits_to_embed) < capacity_g:
+                    bits_to_embed = bits_to_embed.ljust(capacity_g, '0')
+                bits_value = int(bits_to_embed, 2)
+                msg_index += capacity_g
+    
+                print(f"Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
+    
+                x = get_log2(abs(diff_g))
+                new_abs_diff = (2 ** x) + bits_value
+                total_change = new_abs_diff - abs(diff_g)
+                print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
+    
+                while total_change >= 1:
+                    if total_change % 2 == 0:
+                        if pixel1[1] >= pixel2[1]:
+                            if pixel1[1] < 255:
+                                pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
+                            elif pixel2[1] > 0:
+                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
+                        else:
+                            if pixel2[1] < 255:
+                                pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
+                            elif pixel1[1] > 0:
+                                    pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
                     else:
-                        if pixel2[0] > 0:
-                            pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-                        elif pixel1[0] < 255:
-                            pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
-                else:
-                    if pixel1[0] > pixel2[0]:
-                        if pixel2[0] < 255:
-                            pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-                        elif pixel1[0] > 0:
-                            pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                    else:
-                        if pixel1[0] < 255:
-                            pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
-                        elif pixel2[0] > 0:
-                            pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-
-                total_change += 1
-
-            print(f"value is {pixel1[0]} and {pixel2[0]} after mod")
-
-        if msg_index < msg_length and capacity_g > 0:
-            bits_to_embed = message_bits[msg_index:msg_index + capacity_g]
-            if len(bits_to_embed) < capacity_g:
-                bits_to_embed = bits_to_embed.ljust(capacity_g, '0')
-            bits_value = int(bits_to_embed, 2)
-            msg_index += capacity_g
-
-            print(f"Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
-
-            x = get_log2(abs(diff_g))
-            new_abs_diff = (2 ** x) + bits_value
-            total_change = new_abs_diff - abs(diff_g)
-            print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
-
-            while total_change >= 1:
-                if total_change % 2 == 0:
-                    if pixel1[1] >= pixel2[1]:
-                        if pixel1[1] < 255:
-                            pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
-                        elif pixel2[1] > 0:
-                            pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                    else:
-                        if pixel2[1] < 255:
-                            pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-                        elif pixel1[1] > 0:
+                        if pixel1[1] >= pixel2[1]:
+                            if pixel2[1] > 0:
+                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
+                            elif pixel1[1] < 255:
+                                    pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
+                        else:
+                            if pixel1[1] > 0:
                                 pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                else:
-                    if pixel1[1] >= pixel2[1]:
-                        if pixel2[1] > 0:
-                            pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                        elif pixel1[1] < 255:
+                            elif pixel2[1] < 255:
+                                    pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
+    
+                    total_change -= 1
+    
+                while total_change <= -1:
+    
+                    if total_change % 2 == 0:
+                        if pixel1[1] > pixel2[1]:
+                            if pixel1[1] > 0:
+                                pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
+                            elif pixel2[1] < 255:
+                                pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
+                        else:
+                            if pixel2[1] > 0:
+                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
+                            elif pixel1[1] < 255:
                                 pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
                     else:
-                        if pixel1[1] > 0:
-                            pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                        elif pixel2[1] < 255:
+                        if pixel1[1] > pixel2[1]:
+                            if pixel2[1] < 255:
                                 pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-
-                total_change -= 1
-
-            while total_change <= -1:
-
-                if total_change % 2 == 0:
-                    if pixel1[1] > pixel2[1]:
-                        if pixel1[1] > 0:
-                            pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                        elif pixel2[1] < 255:
-                            pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-                    else:
-                        if pixel2[1] > 0:
-                            pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                        elif pixel1[1] < 255:
-                            pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
-                else:
-                    if pixel1[1] > pixel2[1]:
-                        if pixel2[1] < 255:
-                            pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-                        elif pixel1[1] > 0:
-                            pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                    else:
-                        if pixel1[1] < 255:
-                            pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
-                        elif pixel2[1] > 0:
-                            pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                
-                total_change += 1
-            print(f"value is {pixel1[1]} and {pixel2[1]} after mod")
-
-        if msg_index < msg_length and capacity_b > 0:
-            bits_to_embed = message_bits[msg_index:msg_index + capacity_b]
-            if len(bits_to_embed) < capacity_b:
-                bits_to_embed = bits_to_embed.ljust(capacity_b, '0')
-            bits_value = int(bits_to_embed, 2)
-            msg_index += capacity_b
-
-            print(f"Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
+                            elif pixel1[1] > 0:
+                                pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
+                        else:
+                            if pixel1[1] < 255:
+                                pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
+                            elif pixel2[1] > 0:
+                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
+                    
+                    total_change += 1
+                print(f"value is {pixel1[1]} and {pixel2[1]} after mod")
     
-            x = get_log2(abs(diff_b))
-            new_abs_diff = (2 ** x) + bits_value
-            total_change = new_abs_diff - abs(diff_b)
-            print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
-
-            while total_change >= 1:
-                if total_change % 2 == 0: 
-                    if pixel1[2] >= pixel2[2]:
-                        if pixel1[2] < 255: 
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                        elif pixel2[2] > 0:
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
+            if msg_index < msg_length and capacity_b > 0:
+                bits_to_embed = message_bits[msg_index:msg_index + capacity_b]
+                if len(bits_to_embed) < capacity_b:
+                    bits_to_embed = bits_to_embed.ljust(capacity_b, '0')
+                bits_value = int(bits_to_embed, 2)
+                msg_index += capacity_b
+    
+                print(f"Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
+        
+                x = get_log2(abs(diff_b))
+                new_abs_diff = (2 ** x) + bits_value
+                total_change = new_abs_diff - abs(diff_b)
+                print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
+    
+                while total_change >= 1:
+                    if total_change % 2 == 0: 
+                        if pixel1[2] >= pixel2[2]:
+                            if pixel1[2] < 255: 
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
+                            elif pixel2[2] > 0:
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
+                        else:
+                            if pixel2[2] < 255: 
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
+                            elif pixel1[2] > 0: 
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
+                    else: 
+                        if pixel1[2] >= pixel2[2]:
+                            if pixel2[2] > 0: 
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
+                            elif pixel1[2] < 255:
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
+                        else:
+                            if pixel1[2] > 0: 
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
+                            elif pixel2[2] < 255: 
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
+    
+                    total_change -= 1
+                    
+                while total_change <= -1:
+    
+                    if total_change % 2 == 0:
+                        if pixel1[2] > pixel2[2]:
+                            if pixel1[2] > 0:
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
+                            elif pixel2[2] < 255:
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
+                        else:
+                            if pixel2[2] > 0:
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
+                            elif pixel1[2] < 255:
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
                     else:
-                        if pixel2[2] < 255: 
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-                        elif pixel1[2] > 0: 
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                else: 
-                    if pixel1[2] >= pixel2[2]:
-                        if pixel2[2] > 0: 
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-                        elif pixel1[2] < 255:
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                    else:
-                        if pixel1[2] > 0: 
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                        elif pixel2[2] < 255: 
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-
-                total_change -= 1
-                
-            while total_change <= -1:
-
-                if total_change % 2 == 0:
-                    if pixel1[2] > pixel2[2]:
-                        if pixel1[2] > 0:
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                        elif pixel2[2] < 255:
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-                    else:
-                        if pixel2[2] > 0:
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-                        elif pixel1[2] < 255:
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                else:
-                    if pixel1[2] > pixel2[2]:
-                        if pixel2[2] < 255:
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-                        elif pixel1[2] > 0:
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                    else:
-                        if pixel1[2] < 255:
-                            pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                        elif pixel2[2] > 0:
-                            pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-
-                total_change += 1
-            print(f"value is {pixel1[2]} and {pixel2[2]} after mod")
-            print("")
-
+                        if pixel1[2] > pixel2[2]:
+                            if pixel2[2] < 255:
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
+                            elif pixel1[2] > 0:
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
+                        else:
+                            if pixel1[2] < 255:
+                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
+                            elif pixel2[2] > 0:
+                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
+    
+                    total_change += 1
+                print(f"value is {pixel1[2]} and {pixel2[2]} after mod")
+                print("")
+    
     if msg_index < msg_length:
         print("Warning: Could not embed the full message. Only part of the message was embedded.")
 
