@@ -18,6 +18,7 @@ from PIL import Image
 # placeholders for now, will update generator function to do more later
 pixel_pair_mode = "horizontal"
 pixel_iteration_mode = "standard"
+color_mode = "grayscale"
 
 
 # bitmap class #
@@ -93,6 +94,9 @@ def pixel_pairs(img): # takes PIL Image object as parameter
 def calculate_rgb_difference(pixel1, pixel2):
     # Calculate the difference between 2 RGB pixel values, will be used for determining range to hide in
     return (abs(pixel1[0] - pixel2[0]), abs(pixel1[1] - pixel2[1]), abs(pixel1[2] - pixel2[2]))
+
+def calculate_gray_difference(pixel1, pixel2):
+    return abs(pixel1-pixel2)
 
 def get_embedding_capacity(diff):
     adiff = abs(diff)
@@ -376,10 +380,16 @@ def main():
     cover_image = bitmap(args.cover_image)
     
     if args.dry_run:
+        total_capacity = 0
         for pixel_pair in pixel_pairs(cover_image.image):
-            print(pixel_pair)
-            diff = calculate_rgb_difference(*pixel_pair)
-            print(diff)
+            if color_mode == "grayscale":
+                total_capacity += get_embedding_capacity(pixel_pair[0] - pixel_pair[1])
+            else:
+                print("Error: color mode not implemented yet")
+                # TODO: implement color for testing purposes
+                diff = calculate_rgb_difference(pixel_pair[0], pixel_pair[1])
+        print("total capacity is:", total_capacity, "bits =", total_capacity // 8, "bytes =", total_capacity // 64, "MB")
+
     else:
         # Embed message into image
         # Example command line input I used to run this
