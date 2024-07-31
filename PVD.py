@@ -169,30 +169,33 @@ def embed_data_into_image(cover_image, message_bits, output_file):
             break
         
         if color_mode == "grayscale":
+            # find difference range for pixel pair
+            # and also check if valid pixel pair
+            #######################################
             diff = calculate_gray_difference(pixel1, pixel2)
             diff_range = find_difference_range((pixel1, pixel2))
             pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[1] - diff, diff)
-            # from the paper, determine if pixelpair should be skipped:
+            # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
                 print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
                 continue
 
+            # find capacity and get msg bits
+            #################################
+
             capacity = get_embedding_capacity(diff)
-            old_msg_index = msg_index
-            msg_index += capacity
-            if msg_index > msg_length:
+            old_msg_index = msg_index # set lower boundary as last time's upper boundary+1
+            msg_index += capacity # set upper boundary as lower boundary + capacity
+            if msg_index > msg_length: # if no more bits, just get the rest of them
                 msg_index = msg_length + 1
             bits_to_embed = message_bits[old_msg_index:msg_index]
-            if len(bits_to_embed) < capacity:
+            if len(bits_to_embed) < capacity: # if not enough bits, add zeros
                 bits_to_embed = bits_to_embed.ljust(capacity, '0')
             
             bits_value = int(bits_to_embed, 2)
             print(f"Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
 
-            x = get_log2(abs(diff))
-            # TODO / BOOKMARK
-            # ^ I'm tired and going to bed lmao but this is where I got on the grayscale, I'll try to do more tmrw
 
 
 
