@@ -71,7 +71,8 @@ def validate_args(args): # ensures user has given the correct options, and the n
 # using pythons generators will allow us to write logic for iterating through pixel-pairs
 # in different ways, allowing experimentation with different pairs (horizontal vs vertical)
 # and different paths (left->right, top->bottom vs randomly determined with symmetric key, etc)
-# stores pair as ((R,G,B), (R,G,B))
+# stores pair as ((R,G,B), (R,G,B)) for color
+# or as (brightness, brightness) for grayscale
 def pixel_pairs(img): # takes PIL Image object as parameter
     size_x, size_y = img.size
     if pixel_pair_mode == "horizontal":
@@ -148,8 +149,9 @@ def find_difference_range(pixel_pair):
     print("ERROR: for some reason did not calculate range for diff =", diff)
 
 
-def grayscale_new_vals(pixel_pair, m, diff): # m is new_difference - old_difference
+def grayscale_new_vals(pixel_pair, m): # m is new_difference - old_difference. I guess you could name it like "diffdiff", but I thought it'd be less confusing to just use the paper's variable
     # from the paper
+    diff = calculate_gray_difference(pixel_pair[0], pixel_pair[1])
     if diff % 2 == 1: # diff is odd
         new_vals = (pixel_pair[0] - math.ceil(m/2), pixel_pair[1] + math.floor(m/2))
     else: # diff is even
@@ -174,7 +176,7 @@ def embed_data_into_image(cover_image, message_bits, output_file):
             #######################################
             diff = calculate_gray_difference(pixel1, pixel2)
             diff_range = find_difference_range((pixel1, pixel2))
-            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[1] - diff, diff)
+            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[1] - diff)
             # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
@@ -194,13 +196,22 @@ def embed_data_into_image(cover_image, message_bits, output_file):
                 bits_to_embed = bits_to_embed.ljust(capacity, '0')
             
             bits_value = int(bits_to_embed, 2)
-            print(f"Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
+            print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
 
+            # find new difference / pixel vals
+            ###################################
+            new_diff = diff_range[bits_value]
+            new_vals = grayscale_new_vals((pixel1, pixel2), new_diff - diff)
+            print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
+
+            # embed bits into output img
+            #############################
+            # TODO figure out how to do this lol
 
 
 
         
-        else:
+        else: # not grayscale
             # Calculate differences for each color channel
             diff_r = (pixel1[0] - pixel2[0])
             diff_g = (pixel1[1] - pixel2[1])
@@ -219,7 +230,7 @@ def embed_data_into_image(cover_image, message_bits, output_file):
                     bits_to_embed = bits_to_embed.ljust(capacity_r, '0')
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_r
-                print(f"Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
+                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
                 
     
                 x = get_log2(abs(diff_r))
@@ -291,12 +302,12 @@ def embed_data_into_image(cover_image, message_bits, output_file):
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_g
     
-                print(f"Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
+                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
     
                 x = get_log2(abs(diff_g))
                 new_abs_diff = (2 ** x) + bits_value
                 total_change = new_abs_diff - abs(diff_g)
-                print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
+                print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
     
                 while total_change >= 1:
                     if total_change % 2 == 0:
@@ -359,12 +370,12 @@ def embed_data_into_image(cover_image, message_bits, output_file):
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_b
     
-                print(f"Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
+                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
         
                 x = get_log2(abs(diff_b))
                 new_abs_diff = (2 ** x) + bits_value
                 total_change = new_abs_diff - abs(diff_b)
-                print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
+                print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
     
                 while total_change >= 1:
                     if total_change % 2 == 0: 
