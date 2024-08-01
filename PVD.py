@@ -30,7 +30,7 @@ class bitmap:
 
     def read_from_file(self, filename):
         self.image = Image.open(filename) # use PIL / Pillow library to read bitmap
-        self.image.load()
+        # self.image.load()
 
     def write_to_file(self, filename):
         # TODO
@@ -43,12 +43,18 @@ def init_commandline_args():
     parser.add_argument("-c", "--cover-image", help="cover image to hide message in")
     parser.add_argument("-m", "--message-file", help="file containing secret message to hide")
     parser.add_argument("-o", "--output-image", help="where to store output image")
-    parser.add_argument("-e", "--extract-message", help="extracts hidden data from image")
+    parser.add_argument("-e", "--extract-image", help="extracts hidden data from this image")
     parser.add_argument("-n", "--dry-run", help="don't hide data, just find capacity for given cover image", action="store_true")
     args = parser.parse_args()
     return args
 
 def validate_args(args): # ensures user has given the correct options, and the needed files exist
+    if args.extract_image:
+        if not os.path.exists(args.extract_image):
+            exit("error: image to extract from does not exist")
+        else:
+            return
+
     if not args.cover_image: # invalid bc no file given
         exit("error: no cover image specified")
     
@@ -81,7 +87,7 @@ def pixel_pairs(img): # takes PIL Image object as parameter
             # only do odd number x values, then the pair of pixels is x-1,y  x,y
             for y in range(size_y):
                 for x in range(1,size_x,2): # start with 1, go by twos. gives us only odd numbers.
-                    yield (img.getpixel((x-1, y)), img.getpixel((x, y)))
+                    yield ((x-1, y), (x, y))
         else:
             print("ERROR: pixel iteration mode", pixel_iteration_mode, "not recognized")
     elif pixel_pair_mode == "vertical":
@@ -158,18 +164,18 @@ def grayscale_new_vals(pixel_pair, m): # m is new_difference - old_difference. I
         new_vals = (pixel_pair[0] - math.floor(m/2), pixel_pair[1] + math.ceil(m/2))
     return new_vals
 
-def embed_data_into_image(cover_image, message_bits, output_file):
-    output_image = cover_image.copy()
-    msg_index = 0
-    msg_length = len(message_bits)
-    pixels = output_image.load()
-
+def extract_data(steg_image):
+    # THIS IS JUST COPY/PASTED FROM EMBED FUNC #
+    # DOES NOT WORK YET #
+    # CHANGE LATER #
     old_msg_index = 0
 
-    for pixel1, pixel2 in pixel_pairs(cover_image):
+    for pixel_coords_1, pixel_coords_2 in pixel_pairs(cover_image):
+        pixel1=cover_image.getpixel(pixel_coords_1)
+        pixel2=cover_image.getpixel(pixel_coords_2)
         if msg_index >= msg_length:
             break
-        
+        set
         if color_mode == "grayscale":
             # find difference range for pixel pair
             # and also check if valid pixel pair
@@ -191,6 +197,7 @@ def embed_data_into_image(cover_image, message_bits, output_file):
             msg_index += capacity # set upper boundary as lower boundary + capacity
             if msg_index > msg_length: # if no more bits, just get the rest of them
                 msg_index = msg_length + 1
+
             bits_to_embed = message_bits[old_msg_index:msg_index]
             if len(bits_to_embed) < capacity: # if not enough bits, add zeros
                 bits_to_embed = bits_to_embed.ljust(capacity, '0')
@@ -206,11 +213,66 @@ def embed_data_into_image(cover_image, message_bits, output_file):
 
             # embed bits into output img
             #############################
-            # TODO figure out how to do this lol
+            pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
+            pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
+            print("[dbg] embedded into image: pxl1", output_image.getpixel(pixel_coords_1), "pxl2", output_image.getpixel(pixel_coords_2))
+    return data
 
+def embed_data_into_image(cover_image, message_bits, output_file):
+    output_image = cover_image.copy()
+    msg_index = 0
+    msg_length = len(message_bits)
+    pixels = output_image.load()
 
+    old_msg_index = 0
 
-        
+    for pixel_coords_1, pixel_coords_2 in pixel_pairs(cover_image):
+        pixel1=cover_image.getpixel(pixel_coords_1)
+        pixel2=cover_image.getpixel(pixel_coords_2)
+        if msg_index >= msg_length:
+            break
+        set
+        if color_mode == "grayscale":
+            # find difference range for pixel pair
+            # and also check if valid pixel pair
+            #######################################
+            diff = calculate_gray_difference(pixel1, pixel2)
+            diff_range = find_difference_range((pixel1, pixel2))
+            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[1] - diff)
+            # from the paper. determine if pixelpair should be skipped:
+            if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
+                # invalid pair
+                print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
+                continue
+
+            # find capacity and get msg bits
+            #################################
+
+            capacity = get_embedding_capacity(diff)
+            old_msg_index = msg_index # set lower boundary as last time's upper boundary+1
+            msg_index += capacity # set upper boundary as lower boundary + capacity
+            if msg_index > msg_length: # if no more bits, just get the rest of them
+                msg_index = msg_length + 1
+
+            bits_to_embed = message_bits[old_msg_index:msg_index]
+            if len(bits_to_embed) < capacity: # if not enough bits, add zeros
+                bits_to_embed = bits_to_embed.ljust(capacity, '0')
+            
+            bits_value = int(bits_to_embed, 2)
+            print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
+
+            # find new difference / pixel vals
+            ###################################
+            new_diff = diff_range[bits_value]
+            new_vals = grayscale_new_vals((pixel1, pixel2), new_diff - diff)
+            print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
+
+            # embed bits into output img
+            #############################
+            pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
+            pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
+            print("[dbg] embedded into image: pxl1", output_image.getpixel(pixel_coords_1), "pxl2", output_image.getpixel(pixel_coords_2))
+
         else: # not grayscale
             # Calculate differences for each color channel
             diff_r = (pixel1[0] - pixel2[0])
@@ -442,11 +504,18 @@ def embed_data_into_image(cover_image, message_bits, output_file):
 def main():
     args = init_commandline_args()
     validate_args(args) # will exit if invalid args
-    cover_image = bitmap(args.cover_image)
     
-    if args.dry_run:
+    if args.extract_image:
+        steg_image = bitmap(args.extract_image)
+        data = extract_data(steg_image.image)
+        print("your data is: ", data)
+        # TODO probably find way to write this to output file
+    
+    elif args.dry_run:
+        cover_image = bitmap(args.cover_image)
         total_capacity = 0
-        for pixel_pair in pixel_pairs(cover_image.image):
+        for pixel_pair_coords in pixel_pairs(cover_image.image):
+            pixel_pair = [cover_image.image.getpixel(pixel_pair_coords[z]) for z in [0,1]]
             if color_mode == "grayscale":
                 total_capacity += get_embedding_capacity(pixel_pair[0] - pixel_pair[1])
             else:
@@ -459,6 +528,7 @@ def main():
         # Embed message into image
         # Example command line input I used to run this
         # python3 PVD.py -c ../tunnel.bmp -m smallPi.txt -o firstImg.bmp
+        cover_image = bitmap(args.cover_image)
         message_bits = read_message_file(args.message_file)
         embed_data_into_image(cover_image.image, message_bits, args.output_image)
         #cover_image.write_to_file(args.output_image)
