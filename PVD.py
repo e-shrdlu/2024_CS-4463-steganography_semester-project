@@ -64,7 +64,7 @@ def validate_args(args): # ensures user has given the correct options, and the n
     if args.extract_image:
         if not os.path.exists(args.extract_image):
             exit("error: image to extract from does not exist")
-        if not os.path.exists(args.output_file):
+        if not args.output_file:
             exit("error: you need to provide an output file")
         else:
             return
@@ -182,12 +182,13 @@ def extract_data(steg_image):
     # THIS IS JUST COPY/PASTED FROM EMBED FUNC #
     # DOES NOT WORK YET #
     # CHANGE LATER #
-    bits = []
+    bits = ""
+    bytes_to_read = 50 # change later # TODO
 
     for pixel_coords_1, pixel_coords_2 in pixel_pairs(steg_image):
         pixel1=steg_image.getpixel(pixel_coords_1)
         pixel2=steg_image.getpixel(pixel_coords_2)
-        if msg_index >= msg_length:
+        if len(bits) / 8  >= bytes_to_read:
             break
         set
         if color_mode == "grayscale":
@@ -207,30 +208,14 @@ def extract_data(steg_image):
             #################################
 
             capacity = get_embedding_capacity(diff)
-            old_msg_index = msg_index # set lower boundary as last time's upper boundary+1
-            msg_index += capacity # set upper boundary as lower boundary + capacity
-            if msg_index > msg_length: # if no more bits, just get the rest of them
-                msg_index = msg_length + 1
 
-            bits_to_embed = message_bits[old_msg_index:msg_index]
-            if len(bits_to_embed) < capacity: # if not enough bits, add zeros
-                bits_to_embed = bits_to_embed.ljust(capacity, '0')
-            
-            bits_value = int(bits_to_embed, 2)
-            print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
+            bits_value = format(diff_range.index(diff), '0'+str(capacity)+'b')
 
-            # find new difference / pixel vals
-            ###################################
-            new_diff = diff_range[bits_value]
-            new_vals = grayscale_new_vals((pixel1, pixel2), new_diff - diff)
-            print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
+            print(f"[dbg] extracted bits {bits_value} , value is {pixel1} and {pixel2}, diff is {diff}, range is {diff_range}")
 
-            # embed bits into output img
-            #############################
-            pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
-            pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
-            print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2))
-    return data
+            bits = bits_value + bits
+
+    return bits
 
 def embed_data_into_image(cover_image, message_bits, output_filename):
     output_file = cover_image.copy()
@@ -523,6 +508,11 @@ def main():
         steg_image = bitmap(args.extract_image)
         data = extract_data(steg_image.image)
         print("your data is: ", data)
+        print("your data in ascii is:")
+        for i in range(0, len(data), 8):
+            byte = data[i:i+8]
+            byte = int(byte, 2)
+            print(chr(byte), end='')
         # TODO probably find way to write this to output file
     
     elif args.dry_run:
