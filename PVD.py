@@ -64,6 +64,8 @@ def validate_args(args): # ensures user has given the correct options, and the n
     if args.extract_image:
         if not os.path.exists(args.extract_image):
             exit("error: image to extract from does not exist")
+        if not os.path.exists(args.output_file):
+            exit("error: you need to provide an output file")
         else:
             return
 
@@ -181,7 +183,6 @@ def extract_data(steg_image):
     # DOES NOT WORK YET #
     # CHANGE LATER #
     bits = []
-    old_msg_index = 0
 
     for pixel_coords_1, pixel_coords_2 in pixel_pairs(steg_image):
         pixel1=steg_image.getpixel(pixel_coords_1)
@@ -231,7 +232,7 @@ def extract_data(steg_image):
             print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2))
     return data
 
-def embed_data_into_image(cover_image, message_bits, output_file):
+def embed_data_into_image(cover_image, message_bits, output_filename):
     output_file = cover_image.copy()
     msg_index = 0
     msg_length = len(message_bits)
@@ -511,7 +512,7 @@ def embed_data_into_image(cover_image, message_bits, output_file):
         print("Warning: Could not embed the full message. Only part of the message was embedded.")
 
     # Save the modified image
-    output_file.save(output_file)
+    output_file.save(output_filename)
     print(f"Output image saved as {output_file}")
 
 def main():
