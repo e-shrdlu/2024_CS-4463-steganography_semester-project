@@ -42,7 +42,7 @@ def init_commandline_args():
     parser = argparse.ArgumentParser(prog="PVD", description="Pixel Value Differencing Steganography", epilog="wheeeeee")
     parser.add_argument("-c", "--cover-image", help="cover image to hide message in")
     parser.add_argument("-m", "--message-file", help="file containing secret message to hide")
-    parser.add_argument("-o", "--output-image", help="where to store output image")
+    parser.add_argument("-o", "--output-file", help="where to store output")
     parser.add_argument("-e", "--extract-image", help="extracts hidden data from this image")
     parser.add_argument("-n", "--dry-run", help="don't hide data, just find capacity for given cover image", action="store_true")
     args = parser.parse_args()
@@ -62,14 +62,14 @@ def validate_args(args): # ensures user has given the correct options, and the n
         exit("error: cover image does not exist")
 
     if not args.dry_run:
-        if not (args.output_image and args.message_file): # invalid becuase no files given
+        if not (args.output_file and args.message_file): # invalid becuase no files given
             exit("error: you must specify an output image and a message file")
 
         if not os.path.exists(args.message_file):
             exit("error: message file does not exist")
 
-        if not os.path.exists(args.output_image):
-            print("warning: output image", args.output_image, "already exists. You have 1s to cancel...")
+        if not os.path.exists(args.output_file):
+            print("warning: output image", args.output_file, "already exists. You have 1s to cancel...")
             time.sleep(1)
 
 # Image iterating generator thing #
@@ -170,9 +170,9 @@ def extract_data(steg_image):
     # CHANGE LATER #
     old_msg_index = 0
 
-    for pixel_coords_1, pixel_coords_2 in pixel_pairs(cover_image):
-        pixel1=cover_image.getpixel(pixel_coords_1)
-        pixel2=cover_image.getpixel(pixel_coords_2)
+    for pixel_coords_1, pixel_coords_2 in pixel_pairs(steg_image):
+        pixel1=steg_image.getpixel(pixel_coords_1)
+        pixel2=steg_image.getpixel(pixel_coords_2)
         if msg_index >= msg_length:
             break
         set
@@ -215,14 +215,14 @@ def extract_data(steg_image):
             #############################
             pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
             pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
-            print("[dbg] embedded into image: pxl1", output_image.getpixel(pixel_coords_1), "pxl2", output_image.getpixel(pixel_coords_2))
+            print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2))
     return data
 
 def embed_data_into_image(cover_image, message_bits, output_file):
-    output_image = cover_image.copy()
+    output_file = cover_image.copy()
     msg_index = 0
     msg_length = len(message_bits)
-    pixels = output_image.load()
+    pixels = output_file.load()
 
     old_msg_index = 0
 
@@ -271,7 +271,7 @@ def embed_data_into_image(cover_image, message_bits, output_file):
             #############################
             pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
             pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
-            print("[dbg] embedded into image: pxl1", output_image.getpixel(pixel_coords_1), "pxl2", output_image.getpixel(pixel_coords_2))
+            print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2))
 
         else: # not grayscale
             # Calculate differences for each color channel
@@ -498,7 +498,7 @@ def embed_data_into_image(cover_image, message_bits, output_file):
         print("Warning: Could not embed the full message. Only part of the message was embedded.")
 
     # Save the modified image
-    output_image.save(output_file)
+    output_file.save(output_file)
     print(f"Output image saved as {output_file}")
 
 def main():
@@ -530,9 +530,9 @@ def main():
         # python3 PVD.py -c ../tunnel.bmp -m smallPi.txt -o firstImg.bmp
         cover_image = bitmap(args.cover_image)
         message_bits = read_message_file(args.message_file)
-        embed_data_into_image(cover_image.image, message_bits, args.output_image)
-        #cover_image.write_to_file(args.output_image)
-        print(f"Data embedded successfully into {args.output_image}")
+        embed_data_into_image(cover_image.image, message_bits, args.output_file)
+        #cover_image.write_to_file(args.output_file)
+        print(f"Data embedded successfully into {args.output_file}")
 
 
 if __name__=="__main__":
