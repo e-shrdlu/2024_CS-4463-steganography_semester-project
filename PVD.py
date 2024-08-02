@@ -11,6 +11,7 @@ import textwrap
 import os
 import time
 import math
+import struct
 from PIL import Image
 
 # global vars / settings #
@@ -500,6 +501,31 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
     output_file.save(output_filename)
     print(f"Output image saved as {output_file}")
 
+def add_filesize_bits(bitstring):
+    print(f"Bitstring: {bitstring}")
+
+    # Ensure the bitstring consists of '0's and '1's
+    if not all(c in '01' for c in bitstring):
+        raise ValueError("Bitstring should only contain '0's and '1's.")
+    
+    # Calculate the size of the bitstring in bytes
+    bitstring_size = len(bitstring) // 8
+    if len(bitstring) % 8 != 0:
+        bitstring_size += 1  # Account for incomplete byte
+
+    print(f"Size of bitstring in bytes: {bitstring_size} bytes")
+
+    # Convert the size to a 32-bit binary string
+    size_bits = f'{bitstring_size:032b}'
+    print(f"Size as 32-bit binary string: {size_bits}")
+
+    # Prepend the size bits to the original bitstring
+    combined_data = size_bits + bitstring
+    print(f"Combined data: {combined_data}")
+
+    return combined_data
+
+
 def main():
     args = init_commandline_args()
     validate_args(args) # will exit if invalid args
@@ -534,7 +560,8 @@ def main():
         # python3 PVD.py -c ../tunnel.bmp -m smallPi.txt -o firstImg.bmp
         cover_image = bitmap(args.cover_image)
         message_bits = read_message_file(args.message_file)
-        embed_data_into_image(cover_image.image, message_bits, args.output_file)
+        full_bits = add_filesize_bits(message_bits)
+        embed_data_into_image(cover_image.image, full_bits, args.output_file)
         #cover_image.write_to_file(args.output_file)
         print(f"Data embedded successfully into {args.output_file}")
 
