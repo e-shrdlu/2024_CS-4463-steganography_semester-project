@@ -7,6 +7,7 @@
 
 
 import argparse
+import textwrap
 import os
 import time
 import math
@@ -39,7 +40,18 @@ class bitmap:
 # command line arguments #
 ##########################
 def init_commandline_args():
-    parser = argparse.ArgumentParser(prog="PVD", description="Pixel Value Differencing Steganography", epilog="wheeeeee")
+    parser = argparse.ArgumentParser(prog="PVD", description="Pixel Value Differencing Steganography") #, epilog=textwrap.dedent("""
+        # example usage:
+        #     python3 PVD.py -c my-cover-image.bmp -m my-secret-message.txt -o my-new-image.bmp
+        #      - hide file into cover image
+        #
+        #     python3 PVD.py -c my-cover-image.bmp -n
+        #      - check capacity of my-cover-image.bmp
+        #
+        #     python3 PVD.py -e my-new-image.bmp -o my-recovered-message.txt
+        #      - extract file from stego image"""))
+        # ^ ^ ^ ^ ^ ^ ^ ^ tried to add to help text, but it wasn't working (argparse strips the newlines and it looks kinda bad
+
     parser.add_argument("-c", "--cover-image", help="cover image to hide message in")
     parser.add_argument("-m", "--message-file", help="file containing secret message to hide")
     parser.add_argument("-o", "--output-file", help="where to store output")
@@ -168,6 +180,7 @@ def extract_data(steg_image):
     # THIS IS JUST COPY/PASTED FROM EMBED FUNC #
     # DOES NOT WORK YET #
     # CHANGE LATER #
+    bits = []
     old_msg_index = 0
 
     for pixel_coords_1, pixel_coords_2 in pixel_pairs(steg_image):
