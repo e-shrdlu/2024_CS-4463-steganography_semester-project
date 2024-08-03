@@ -20,6 +20,7 @@ from PIL import Image
 pixel_pair_mode = "horizontal"
 pixel_iteration_mode = "standard"
 color_mode = "grayscale"
+diff_ranges = [0,8,16,32,64,128,256] # hold indices of where ranges begin/end. First/Last elements should always be 0 and 256
 num_bits_for_size=32 # this many bits will be used in the beginning of the image to determine how many bytes of data should be read
 #                 ^^ 32 bits is enough to handle storing 4GB of secret data, which should be enough
 #                 ^^ 16 bits is enough to store 64KB of secret data
@@ -122,38 +123,20 @@ def calculate_rgb_difference(pixel1, pixel2):
 def calculate_gray_difference(pixel1, pixel2):
     return abs(pixel1-pixel2)
 
-def get_embedding_capacity(diff): # TODO: make dynamic
-    adiff = abs(diff)
-    if 0 <= adiff <= 7:
-        return 2
-    elif 8 <= adiff <= 15:
-        return 3
-    elif 16 <= adiff <= 31:
-        return 4
-    elif 32 <= adiff <= 63:
-        return 5
-    elif 64 <= adiff <= 127:
-        return 6
-    elif 128 <= adiff <= 255:
-        return 7
-    else:
+def get_embedding_capacity(diff):
+    # embedding capacity = log2(width of range)
+    # ie log2 of the difference between the upper bound of the range and the lower bound of the range
+    # so we find which range the difference belongs to, then take the log2 of the upperboud - lowerbound
+    diff = abs(diff)
+    if diff > 255:
+        print("ERROR: diff is", diff, ". should be at most 255")
         return 0
+    for i in range(1, len(diff_ranges)): # for each diff range
+        if diff < diff_ranges[i]: # if this is the right diff range
+            return get_log2(diff_ranges[i] - diff_ranges[i-1]) # capacity floor(log2(upper - lower))
 
 def get_log2(val): # TODO: replace with math.log2 function
-    if 0 <= val <= 7:
-        return 2
-    elif 8 <= val <= 15:
-        return 3
-    elif 16 <= val <= 31:
-        return 4
-    elif 32 <= val <= 63:
-        return 5
-    elif 64 <= val <= 127:
-        return 6
-    elif 128 <= val <= 255:
-        return 7
-    else:
-        return 0
+    return math.floor(math.log2(val))
 
 def read_message_file(filepath):
     with open(filepath, 'r') as file:
@@ -163,8 +146,6 @@ def read_message_file(filepath):
 
 def find_difference_range(pixel_pair):
     diff = abs(pixel_pair[0] - pixel_pair[1])
-    # TODO: implement more ranges
-    diff_ranges = [0,8,16,32,64,128,256]
     for i in range(1, len(diff_ranges)):
         if diff < diff_ranges[i]:
             diff_range = list(range(diff_ranges[i-1], diff_ranges[i]))
