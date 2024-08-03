@@ -24,6 +24,7 @@ diff_ranges = [0,8,16,32,64,128,256] # hold indices of where ranges begin/end. F
 num_bits_for_size=32 # this many bits will be used in the beginning of the image to determine how many bytes of data should be read
 #                 ^^ 32 bits is enough to handle storing 4GB of secret data, which should be enough
 #                 ^^ 16 bits is enough to store 64KB of secret data
+debug_mode = 0 # set to 1 for on
 
 
 # bitmap class #
@@ -36,10 +37,6 @@ class bitmap:
     def read_from_file(self, filename):
         self.image = Image.open(filename) # use PIL / Pillow library to read bitmap
         # self.image.load()
-
-    def write_to_file(self, filename):
-        # TODO
-        pass
 
 # command line arguments #
 ##########################
@@ -135,7 +132,7 @@ def get_embedding_capacity(diff):
         if diff < diff_ranges[i]: # if this is the right diff range
             return get_log2(diff_ranges[i] - diff_ranges[i-1]) # capacity floor(log2(upper - lower))
 
-def get_log2(val): # TODO: replace with math.log2 function
+def get_log2(val):
     return math.floor(math.log2(val))
 
 def read_message_file(filepath):
@@ -159,15 +156,15 @@ def grayscale_new_vals(pixel_pair, new_diff, diff):
     m = -m
     while True:
         m = -m
-        print("[dbg] m =",m, "m/2 =", m/2, " diff =", diff)
+        if debug_mode: print("[dbg] m =",m, "m/2 =", m/2, " diff =", diff)
         if diff % 2 == 1: # diff is odd
-            print("[dbg] diff is odd")
+            if debug_mode: print("[dbg] diff is odd")
             new_vals = (pixel_pair[0] - math.ceil(m/2), pixel_pair[1] + math.floor(m/2))
-            print("(",pixel_pair[0]," - (ceil)",math.ceil(m/2),", ",pixel_pair[1]," + (floor)",math.floor(m/2))
+            if debug_mode: print("[dbg]", "(",pixel_pair[0]," - (ceil)",math.ceil(m/2),", ",pixel_pair[1]," + (floor)",math.floor(m/2))
         else: # diff is even
-            print("[dbg] diff is even")
+            if debug_mode: print("[dbg] diff is even")
             new_vals = (pixel_pair[0] - math.floor(m/2), pixel_pair[1] + math.ceil(m/2))
-            print("(",pixel_pair[0]," - (floor)",math.floor(m/2),", ",pixel_pair[1]," + (ceil)",math.ceil(m/2),")")
+            if debug_mode: print("[dbg]", "(",pixel_pair[0]," - (floor)",math.floor(m/2),", ",pixel_pair[1]," + (ceil)",math.ceil(m/2),")")
         if calculate_gray_difference(new_vals[0], new_vals[1]) == new_diff:
             break
     return new_vals
@@ -206,8 +203,8 @@ def extract_data(steg_image):
 
             bits_value = format(diff_range.index(diff), '0'+str(capacity)+'b')
 
-            print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
-            print(f"[dbg] extracted bits {bits_value}, pixel values: {pixel1}, {pixel2}, diff is {diff}, range is {diff_range}")
+            if debug_mode: print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
+            if debug_mode: print(f"[dbg] extracted bits {bits_value}, pixel values: {pixel1}, {pixel2}, diff is {diff}, range is {diff_range}")
 
             bits = bits + bits_value
 
@@ -254,21 +251,20 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                 bits_to_embed = bits_to_embed.ljust(capacity, '0')
             
             bits_value = int(bits_to_embed, 2)
-            print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
-            print(f"[dbg] old_msg_index={old_msg_index} - Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
+            if debug_mode: print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
+            if debug_mode: print(f"[dbg] old_msg_index={old_msg_index} - Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
 
             # find new difference / pixel vals
             ###################################
             new_diff = diff_range[bits_value]
             new_vals = grayscale_new_vals((pixel1, pixel2), new_diff, diff)
-            print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
+            if debug_mode: print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
 
             # embed bits into output img
             #############################
             pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
             pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
-            print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2))
-            print()
+            if debug_mode: print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2), end="\n\n")
 
         else: # not grayscale
             # Calculate differences for each color channel
@@ -289,7 +285,7 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                     bits_to_embed = bits_to_embed.ljust(capacity_r, '0')
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_r
-                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
+                if debug_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
                 
     
                 x = get_log2(abs(diff_r))
@@ -361,12 +357,12 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_g
     
-                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
+                if debug_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
     
                 x = get_log2(abs(diff_g))
                 new_abs_diff = (2 ** x) + bits_value
                 total_change = new_abs_diff - abs(diff_g)
-                print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
+                if debug_mode: print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
     
                 while total_change >= 1:
                     if total_change % 2 == 0:
@@ -429,12 +425,12 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_b
     
-                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
+                if debug_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
         
                 x = get_log2(abs(diff_b))
                 new_abs_diff = (2 ** x) + bits_value
                 total_change = new_abs_diff - abs(diff_b)
-                print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
+                if debug_mode: print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
     
                 while total_change >= 1:
                     if total_change % 2 == 0: 
@@ -492,14 +488,14 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                 print("")
     
     if msg_index < msg_length:
-        print("Warning: Could not embed the full message. Only part of the message was embedded.")
+        print(f"Warning: Could not embed the full message. Only part of the message was embedded. Embedded {msg_index / msg_length}% = {msg_index} bits = {msg_index / 8} bytes")
 
     # Save the modified image
     output_file.save(output_filename)
-    print(f"Output image saved as {output_file}")
+    print(f"Output image saved as {output_filename}")
 
 def add_filesize_bits(bitstring):
-    print(f"Bitstring: {bitstring}")
+    if debug_mode: print(f"Bitstring: {bitstring}")
 
     # Ensure the bitstring consists of '0's and '1's
     if not all(c in '01' for c in bitstring):
@@ -510,15 +506,15 @@ def add_filesize_bits(bitstring):
     if len(bitstring) % 8 != 0:
         bitstring_size += 1  # Account for incomplete byte
 
-    print(f"Size of bitstring in bytes: {bitstring_size} bytes")
+    print(f"Size of message in bytes: {bitstring_size} bytes")
 
     # Convert the size to a 32-bit binary string
     size_bits = ("{:0" + str(num_bits_for_size) + "b}").format(bitstring_size) # this is kinda weird, but basically it'll just turn the number into a binary string of num_bits_for_size size, this way its dynamic with the variable and we don't have to change it
-    print(f"Size as {num_bits_for_size}-bit binary string: {size_bits}")
+    if debug_mode: print(f"Size as {num_bits_for_size}-bit binary string: {size_bits}")
 
     # Prepend the size bits to the original bitstring
     combined_data = size_bits + bitstring
-    print(f"Combined data: {combined_data}")
+    if debug_mode: print(f"Combined data: {combined_data}")
 
     return combined_data
 
@@ -530,7 +526,7 @@ def main():
     if args.extract_image:
         steg_image = bitmap(args.extract_image)
         data = extract_data(steg_image.image)
-        print("your data is: ", data)
+        if debug_mode: print("your data is: ", data)
         print("your data in ascii is:")
         for i in range(0, len(data), 8):
             byte = data[i:i+8]
@@ -559,7 +555,6 @@ def main():
         message_bits = read_message_file(args.message_file)
         full_bits = add_filesize_bits(message_bits)
         embed_data_into_image(cover_image.image, full_bits, args.output_file)
-        #cover_image.write_to_file(args.output_file)
         print(f"Data embedded successfully into {args.output_file}")
 
 
