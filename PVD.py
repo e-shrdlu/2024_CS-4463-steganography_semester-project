@@ -170,13 +170,23 @@ def find_difference_range(pixel_pair):
     print("ERROR: for some reason did not calculate range for diff =", diff)
 
 
-def grayscale_new_vals(pixel_pair, m): # m is new_difference - old_difference. I guess you could name it like "diffdiff", but I thought it'd be less confusing to just use the paper's variable
+def grayscale_new_vals(pixel_pair, new_diff, diff): # m is new_difference - old_difference. I guess you could name it like "diffdiff", but I thought it'd be less confusing to just use the paper's variable
     # from the paper
-    diff = calculate_gray_difference(pixel_pair[0], pixel_pair[1])
-    if diff % 2 == 1: # diff is odd
-        new_vals = (pixel_pair[0] - math.ceil(m/2), pixel_pair[1] + math.floor(m/2))
-    else: # diff is even
-        new_vals = (pixel_pair[0] - math.floor(m/2), pixel_pair[1] + math.ceil(m/2))
+    m = new_diff - diff
+    m = -m
+    while True:
+        m = -m
+        print("[dbg] m =",m, "m/2 =", m/2, " diff =", diff)
+        if diff % 2 == 1: # diff is odd
+            print("[dbg] diff is odd")
+            new_vals = (pixel_pair[0] - math.ceil(m/2), pixel_pair[1] + math.floor(m/2))
+            print("(",pixel_pair[0]," - (ceil)",math.ceil(m/2),", ",pixel_pair[1]," + (floor)",math.floor(m/2))
+        else: # diff is even
+            print("[dbg] diff is even")
+            new_vals = (pixel_pair[0] - math.floor(m/2), pixel_pair[1] + math.ceil(m/2))
+            print("(",pixel_pair[0]," - (floor)",math.floor(m/2),", ",pixel_pair[1]," + (ceil)",math.ceil(m/2),")")
+        if calculate_gray_difference(new_vals[0], new_vals[1]) == new_diff:
+            break
     return new_vals
 
 def extract_data(steg_image):
@@ -198,7 +208,7 @@ def extract_data(steg_image):
             #######################################
             diff = calculate_gray_difference(pixel1, pixel2)
             diff_range = find_difference_range((pixel1, pixel2))
-            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[1] - diff)
+            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[-1], diff)
             # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
@@ -212,9 +222,10 @@ def extract_data(steg_image):
 
             bits_value = format(diff_range.index(diff), '0'+str(capacity)+'b')
 
-            print(f"[dbg] extracted bits {bits_value} , value is {pixel1} and {pixel2}, diff is {diff}, range is {diff_range}")
+            print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
+            print(f"[dbg] extracted bits {bits_value}, pixel values: {pixel1}, {pixel2}, diff is {diff}, range is {diff_range}")
 
-            bits = bits_value + bits
+            bits = bits + bits_value
 
     return bits
 
@@ -238,7 +249,7 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
             #######################################
             diff = calculate_gray_difference(pixel1, pixel2)
             diff_range = find_difference_range((pixel1, pixel2))
-            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[1] - diff)
+            pixel_pair_possible_vals = grayscale_new_vals((pixel1, pixel2), diff_range[-1], diff)
             # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
@@ -259,12 +270,13 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                 bits_to_embed = bits_to_embed.ljust(capacity, '0')
             
             bits_value = int(bits_to_embed, 2)
-            print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
+            print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
+            print(f"[dbg] old_msg_index={old_msg_index} - Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
 
             # find new difference / pixel vals
             ###################################
             new_diff = diff_range[bits_value]
-            new_vals = grayscale_new_vals((pixel1, pixel2), new_diff - diff)
+            new_vals = grayscale_new_vals((pixel1, pixel2), new_diff, diff)
             print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
 
             # embed bits into output img
@@ -272,6 +284,7 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
             pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
             pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
             print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2))
+            print()
 
         else: # not grayscale
             # Calculate differences for each color channel
