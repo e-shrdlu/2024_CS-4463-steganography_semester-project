@@ -25,6 +25,7 @@ num_bits_for_size=32 # this many bits will be used in the beginning of the image
 #                 ^^ 32 bits is enough to handle storing 4GB of secret data, which should be enough
 #                 ^^ 16 bits is enough to store 64KB of secret data
 debug_mode = 0 # set to 1 for on
+quiet_mode = 0
 
 
 # bitmap class #
@@ -58,6 +59,8 @@ def init_commandline_args():
     parser.add_argument("-o", "--output-file", help="where to store output")
     parser.add_argument("-e", "--extract-image", help="extracts hidden data from this image")
     parser.add_argument("-n", "--dry-run", help="don't hide data, just find capacity for given cover image", action="store_true")
+    parser.add_argument("-v", "--verbose", help="print out extra information", action="store_true")
+    parser.add_argument("-q", "--quiet", help="don't print out anything", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -72,7 +75,7 @@ def validate_args(args): # ensures user has given the correct options, and the n
 
     if not args.cover_image: # invalid bc no file given
         exit("error: no cover image specified")
-    
+
     if not os.path.exists(args.cover_image): # invalid bc file given does not exist
         exit("error: cover image does not exist")
 
@@ -156,15 +159,15 @@ def grayscale_new_vals(pixel_pair, new_diff, diff):
     m = -m
     while True:
         m = -m
-        if debug_mode: print("[dbg] m =",m, "m/2 =", m/2, " diff =", diff)
+        if debug_mode and not quiet_mode: print("[dbg] m =",m, "m/2 =", m/2, " diff =", diff)
         if diff % 2 == 1: # diff is odd
-            if debug_mode: print("[dbg] diff is odd")
+            if debug_mode and not quiet_mode: print("[dbg] diff is odd")
             new_vals = (pixel_pair[0] - math.ceil(m/2), pixel_pair[1] + math.floor(m/2))
-            if debug_mode: print("[dbg]", "(",pixel_pair[0]," - (ceil)",math.ceil(m/2),", ",pixel_pair[1]," + (floor)",math.floor(m/2))
+            if debug_mode and not quiet_mode: print("[dbg]", "(",pixel_pair[0]," - (ceil)",math.ceil(m/2),", ",pixel_pair[1]," + (floor)",math.floor(m/2))
         else: # diff is even
-            if debug_mode: print("[dbg] diff is even")
+            if debug_mode and not quiet_mode: print("[dbg] diff is even")
             new_vals = (pixel_pair[0] - math.floor(m/2), pixel_pair[1] + math.ceil(m/2))
-            if debug_mode: print("[dbg]", "(",pixel_pair[0]," - (floor)",math.floor(m/2),", ",pixel_pair[1]," + (ceil)",math.ceil(m/2),")")
+            if debug_mode and not quiet_mode: print("[dbg]", "(",pixel_pair[0]," - (floor)",math.floor(m/2),", ",pixel_pair[1]," + (ceil)",math.ceil(m/2),")")
         if calculate_gray_difference(new_vals[0], new_vals[1]) == new_diff:
             break
     return new_vals
@@ -193,7 +196,7 @@ def extract_data(steg_image):
             # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
-                print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
+                if not quiet_mode: print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
                 continue
 
             # find capacity and get msg bits
@@ -203,8 +206,8 @@ def extract_data(steg_image):
 
             bits_value = format(diff_range.index(diff), '0'+str(capacity)+'b')
 
-            if debug_mode: print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
-            if debug_mode: print(f"[dbg] extracted bits {bits_value}, pixel values: {pixel1}, {pixel2}, diff is {diff}, range is {diff_range}")
+            if debug_mode and not quiet_mode: print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
+            if debug_mode and not quiet_mode: print(f"[dbg] extracted bits {bits_value}, pixel values: {pixel1}, {pixel2}, diff is {diff}, range is {diff_range}")
 
             bits = bits + bits_value
 
@@ -234,7 +237,7 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
             # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
-                print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
+                if not quiet_mode: print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
                 continue
 
             # find capacity and get msg bits
@@ -249,34 +252,34 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
             bits_to_embed = message_bits[old_msg_index:msg_index]
             if len(bits_to_embed) < capacity: # if not enough bits, add zeros
                 bits_to_embed = bits_to_embed.ljust(capacity, '0')
-            
+
             bits_value = int(bits_to_embed, 2)
-            if debug_mode: print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
-            if debug_mode: print(f"[dbg] old_msg_index={old_msg_index} - Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
+            if debug_mode and not quiet_mode: print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
+            if debug_mode and not quiet_mode: print(f"[dbg] old_msg_index={old_msg_index} - Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
 
             # find new difference / pixel vals
             ###################################
             new_diff = diff_range[bits_value]
             new_vals = grayscale_new_vals((pixel1, pixel2), new_diff, diff)
-            if debug_mode: print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
+            if debug_mode and not quiet_mode: print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
 
             # embed bits into output img
             #############################
             pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
             pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
-            if debug_mode: print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2), end="\n\n")
+            if debug_mode and not quiet_mode: print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2), end="\n\n")
 
         else: # not grayscale
-            # Calculate differences for each color channel
+                # Calculate differences for each color channel
             diff_r = (pixel1[0] - pixel2[0])
             diff_g = (pixel1[1] - pixel2[1])
             diff_b = (pixel1[2] - pixel2[2])
-            
+
             # Determine embedding capacity based on the difference
             capacity_r = get_embedding_capacity(diff_r)
             capacity_g = get_embedding_capacity(diff_g)
             capacity_b = get_embedding_capacity(diff_b)
-            
+
             # Embed data into the differences sequentially
             # pixels have their dif
             if msg_index < msg_length and capacity_r > 0:
@@ -285,17 +288,17 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                     bits_to_embed = bits_to_embed.ljust(capacity_r, '0')
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_r
-                if debug_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
-                
-    
+                if debug_mode and not quiet_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
+
+
                 x = get_log2(abs(diff_r))
                 new_abs_diff = (2 ** x) + bits_value
                 total_change = new_abs_diff - abs(diff_r)
                 print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_r)} to {new_abs_diff} for a total change of {total_change}")
-    
+
                 # If total_change is positive then the difference between the 2 channel values needs to go up.
                 while total_change >= 1:
-                    
+
                     if total_change % 2 == 0: 
                         if pixel1[0] >= pixel2[0]:
                             if pixel1[0] < 255: 
@@ -306,23 +309,23 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                             if pixel2[0] < 255: 
                                 pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
                             elif pixel1[0] > 0: 
-                                    pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
+                                pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
                     else: 
                         if pixel1[0] >= pixel2[0]:
                             if pixel2[0] > 0: 
                                 pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
                             elif pixel1[0] < 255:
-                                    pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
+                                pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
                         else:
                             if pixel1[0] > 0: 
                                 pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
                             elif pixel2[0] < 255: 
-                                    pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-    
+                                pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
+
                     total_change -= 1
-                    
+
                 while total_change <= -1:
-    
+
                     if total_change % 2 == 0:
                         if pixel1[0] > pixel2[0]:
                             if pixel1[0] > 0:
@@ -345,25 +348,25 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                                 pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
                             elif pixel2[0] > 0:
                                 pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-    
+
                     total_change += 1
-    
+
                 print(f"value is {pixel1[0]} and {pixel2[0]} after mod")
-    
+
             if msg_index < msg_length and capacity_g > 0:
                 bits_to_embed = message_bits[msg_index:msg_index + capacity_g]
                 if len(bits_to_embed) < capacity_g:
                     bits_to_embed = bits_to_embed.ljust(capacity_g, '0')
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_g
-    
-                if debug_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
-    
+
+                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
+
                 x = get_log2(abs(diff_g))
                 new_abs_diff = (2 ** x) + bits_value
                 total_change = new_abs_diff - abs(diff_g)
-                if debug_mode: print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
-    
+                print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
+
                 while total_change >= 1:
                     if total_change % 2 == 0:
                         if pixel1[1] >= pixel2[1]:
@@ -375,23 +378,23 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                             if pixel2[1] < 255:
                                 pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
                             elif pixel1[1] > 0:
-                                    pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
+                                pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
                     else:
                         if pixel1[1] >= pixel2[1]:
                             if pixel2[1] > 0:
                                 pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
                             elif pixel1[1] < 255:
-                                    pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
+                                pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
                         else:
                             if pixel1[1] > 0:
                                 pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
                             elif pixel2[1] < 255:
-                                    pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-    
+                                pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
+
                     total_change -= 1
-    
+
                 while total_change <= -1:
-    
+
                     if total_change % 2 == 0:
                         if pixel1[1] > pixel2[1]:
                             if pixel1[1] > 0:
@@ -414,24 +417,24 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                                 pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
                             elif pixel2[1] > 0:
                                 pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                    
+
                     total_change += 1
                 print(f"value is {pixel1[1]} and {pixel2[1]} after mod")
-    
+
             if msg_index < msg_length and capacity_b > 0:
                 bits_to_embed = message_bits[msg_index:msg_index + capacity_b]
                 if len(bits_to_embed) < capacity_b:
                     bits_to_embed = bits_to_embed.ljust(capacity_b, '0')
                 bits_value = int(bits_to_embed, 2)
                 msg_index += capacity_b
-    
+
                 if debug_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
-        
+
                 x = get_log2(abs(diff_b))
                 new_abs_diff = (2 ** x) + bits_value
                 total_change = new_abs_diff - abs(diff_b)
                 if debug_mode: print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
-    
+
                 while total_change >= 1:
                     if total_change % 2 == 0: 
                         if pixel1[2] >= pixel2[2]:
@@ -455,11 +458,11 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                                 pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
                             elif pixel2[2] < 255: 
                                 pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-    
+
                     total_change -= 1
-                    
+
                 while total_change <= -1:
-    
+
                     if total_change % 2 == 0:
                         if pixel1[2] > pixel2[2]:
                             if pixel1[2] > 0:
@@ -482,39 +485,39 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
                                 pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
                             elif pixel2[2] > 0:
                                 pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-    
+
                     total_change += 1
                 print(f"value is {pixel1[2]} and {pixel2[2]} after mod")
                 print("")
-    
+
     if msg_index < msg_length:
         print(f"Warning: Could not embed the full message. Only part of the message was embedded. Embedded {msg_index / msg_length}% = {msg_index} bits = {msg_index / 8} bytes")
 
     # Save the modified image
     output_file.save(output_filename)
-    print(f"Output image saved as {output_filename}")
+    if not quiet_mode: print(f"Output image saved as {output_filename}")
 
 def add_filesize_bits(bitstring):
-    if debug_mode: print(f"Bitstring: {bitstring}")
+    if debug_mode and not quiet_mode: print(f"Bitstring: {bitstring}")
 
     # Ensure the bitstring consists of '0's and '1's
     if not all(c in '01' for c in bitstring):
         raise ValueError("Bitstring should only contain '0's and '1's.")
-    
+
     # Calculate the size of the bitstring in bytes
     bitstring_size = len(bitstring) // 8
     if len(bitstring) % 8 != 0:
         bitstring_size += 1  # Account for incomplete byte
 
-    print(f"Size of message in bytes: {bitstring_size} bytes")
+    if not quiet_mode: print(f"Size of message in bytes: {bitstring_size} bytes")
 
     # Convert the size to a 32-bit binary string
     size_bits = ("{:0" + str(num_bits_for_size) + "b}").format(bitstring_size) # this is kinda weird, but basically it'll just turn the number into a binary string of num_bits_for_size size, this way its dynamic with the variable and we don't have to change it
-    if debug_mode: print(f"Size as {num_bits_for_size}-bit binary string: {size_bits}")
+    if debug_mode and not quiet_mode: print(f"Size as {num_bits_for_size}-bit binary string: {size_bits}")
 
     # Prepend the size bits to the original bitstring
     combined_data = size_bits + bitstring
-    if debug_mode: print(f"Combined data: {combined_data}")
+    if debug_mode and not quiet_mode: print(f"Combined data: {combined_data}")
 
     return combined_data
 
@@ -522,18 +525,25 @@ def add_filesize_bits(bitstring):
 def main():
     args = init_commandline_args()
     validate_args(args) # will exit if invalid args
-    
+
+    if args.verbose:
+        global debug_mode
+        debug_mode = 1
+    if args.quiet:
+        global quiet_mode
+        quiet_mode = 1
+
     if args.extract_image:
         steg_image = bitmap(args.extract_image)
         data = extract_data(steg_image.image)
-        if debug_mode: print("your data is: ", data)
-        print("your data in ascii is:")
+        if debug_mode and not quiet_mode: print("your data is: ", data)
+        if not quiet_mode: print("your data in ascii is:")
         for i in range(0, len(data), 8):
             byte = data[i:i+8]
             byte = int(byte, 2)
-            print(chr(byte), end='')
+            if not quiet_mode: print(chr(byte), end='')
         # TODO probably find way to write this to output file
-    
+
     elif args.dry_run:
         cover_image = bitmap(args.cover_image)
         total_capacity = 0
@@ -555,7 +565,7 @@ def main():
         message_bits = read_message_file(args.message_file)
         full_bits = add_filesize_bits(message_bits)
         embed_data_into_image(cover_image.image, full_bits, args.output_file)
-        print(f"Data embedded successfully into {args.output_file}")
+        if not quiet_mode: print(f"Data embedded successfully into {args.output_file}")
 
 
 if __name__=="__main__":
