@@ -56,7 +56,7 @@ def init_commandline_args():
 
     parser.add_argument("-c", "--cover-image", help="cover image to hide message in")
     parser.add_argument("-m", "--message-file", help="file containing secret message to hide")
-    parser.add_argument("-o", "--output-file", help="where to store output")
+    parser.add_argument("-o", "--output-file", help="file to write output to (defaults to stdout if none given in --extract-image mode)")
     parser.add_argument("-e", "--extract-image", help="extracts hidden data from this image")
     parser.add_argument("-n", "--dry-run", help="don't hide data, just find capacity for given cover image", action="store_true")
     parser.add_argument("-v", "--verbose", help="print out extra information", action="store_true")
@@ -68,8 +68,6 @@ def validate_args(args): # ensures user has given the correct options, and the n
     if args.extract_image:
         if not os.path.exists(args.extract_image):
             exit("error: image to extract from does not exist")
-        if not args.output_file:
-            exit("error: you need to provide an output file")
         else:
             return
 
@@ -537,12 +535,22 @@ def main():
         steg_image = bitmap(args.extract_image)
         data = extract_data(steg_image.image)
         if debug_mode and not quiet_mode: print("your data is: ", data)
-        if not quiet_mode: print("your data in ascii is:")
-        for i in range(0, len(data), 8):
-            byte = data[i:i+8]
-            byte = int(byte, 2)
-            if not quiet_mode: print(chr(byte), end='')
-        # TODO probably find way to write this to output file
+
+        if not args.output_file: # default to stdout if no output file given
+            for i in range(0, len(data), 8):
+                byte = data[i:i+8]
+                byte = int(byte, 2)
+                print(chr(byte),end="")
+        else:
+            with open(args.output_file, "wb") as f:
+                data_bytes = []
+                for i in range(0, len(data), 8):
+                    byte = data[i:i+8]
+                    byte = int(byte, 2)
+                    data_bytes.append(byte)
+                data_bytes = [x & 255 for x in data_bytes] # ensure all values are between 0-255 (they should be, but just a sanity check)
+                data_bytes = bytes(data_bytes)
+                f.write(data_bytes)
 
     elif args.dry_run:
         cover_image = bitmap(args.cover_image)
