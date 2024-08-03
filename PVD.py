@@ -20,6 +20,9 @@ from PIL import Image
 pixel_pair_mode = "horizontal"
 pixel_iteration_mode = "standard"
 color_mode = "grayscale"
+num_bits_for_size=32 # this many bits will be used in the beginning of the image to determine how many bytes of data should be read
+#                 ^^ 32 bits is enough to handle storing 4GB of secret data, which should be enough
+#                 ^^ 16 bits is enough to store 64KB of secret data
 
 
 # bitmap class #
@@ -119,7 +122,7 @@ def calculate_rgb_difference(pixel1, pixel2):
 def calculate_gray_difference(pixel1, pixel2):
     return abs(pixel1-pixel2)
 
-def get_embedding_capacity(diff):
+def get_embedding_capacity(diff): # TODO: make dynamic
     adiff = abs(diff)
     if 0 <= adiff <= 7:
         return 2
@@ -136,7 +139,7 @@ def get_embedding_capacity(diff):
     else:
         return 0
 
-def get_log2(val):
+def get_log2(val): # TODO: replace with math.log2 function
     if 0 <= val <= 7:
         return 2
     elif 8 <= val <= 15:
@@ -169,9 +172,9 @@ def find_difference_range(pixel_pair):
     print("ERROR: for some reason did not calculate range for diff =", diff)
 
 
-def grayscale_new_vals(pixel_pair, new_diff, diff): # m is new_difference - old_difference. I guess you could name it like "diffdiff", but I thought it'd be less confusing to just use the paper's variable
+def grayscale_new_vals(pixel_pair, new_diff, diff): 
     # from the paper
-    m = new_diff - diff
+    m = new_diff - diff # m is new_difference - old_difference. I guess you could name it like "diffdiff", but I thought it'd be less confusing to just use the paper's variable
     m = -m
     while True:
         m = -m
@@ -189,18 +192,19 @@ def grayscale_new_vals(pixel_pair, new_diff, diff): # m is new_difference - old_
     return new_vals
 
 def extract_data(steg_image):
-    # THIS IS JUST COPY/PASTED FROM EMBED FUNC #
-    # DOES NOT WORK YET #
-    # CHANGE LATER #
     bits = ""
-    bytes_to_read = 50 # change later # TODO
+    bytes_to_read = 0 # will change later
 
     for pixel_coords_1, pixel_coords_2 in pixel_pairs(steg_image):
         pixel1=steg_image.getpixel(pixel_coords_1)
         pixel2=steg_image.getpixel(pixel_coords_2)
-        if len(bits) / 8  >= bytes_to_read:
+
+        # break when we've read all the message bits #
+        ##############################################
+        if len(bits) > num_bits_for_size and not bytes_to_read: # wait to determine msg size until we've read enough bits
+            bytes_to_read = int(bits[0:num_bits_for_size],2)
+        if bytes_to_read and len(bits) >= (8*bytes_to_read + num_bits_for_size): #
             break
-        set
         if color_mode == "grayscale":
             # find difference range for pixel pair
             # and also check if valid pixel pair
@@ -226,6 +230,7 @@ def extract_data(steg_image):
 
             bits = bits + bits_value
 
+    bits = bits[num_bits_for_size:] # remove size of message before returning
     return bits
 
 def embed_data_into_image(cover_image, message_bits, output_filename):
@@ -241,7 +246,6 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
         pixel2=cover_image.getpixel(pixel_coords_2)
         if msg_index >= msg_length:
             break
-        set
         if color_mode == "grayscale":
             # find difference range for pixel pair
             # and also check if valid pixel pair
@@ -528,8 +532,8 @@ def add_filesize_bits(bitstring):
     print(f"Size of bitstring in bytes: {bitstring_size} bytes")
 
     # Convert the size to a 32-bit binary string
-    size_bits = f'{bitstring_size:032b}'
-    print(f"Size as 32-bit binary string: {size_bits}")
+    size_bits = ("{:0" + str(num_bits_for_size) + "b}").format(bitstring_size) # this is kinda weird, but basically it'll just turn the number into a binary string of num_bits_for_size size, this way its dynamic with the variable and we don't have to change it
+    print(f"Size as {num_bits_for_size}-bit binary string: {size_bits}")
 
     # Prepend the size bits to the original bitstring
     combined_data = size_bits + bitstring
