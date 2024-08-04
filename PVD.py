@@ -37,7 +37,8 @@ class bitmap:
 
     def read_from_file(self, filename):
         self.image = Image.open(filename) # use PIL / Pillow library to read bitmap
-        # self.image.load()
+        if color_mode == "grayscale":
+            self.image = self.image.convert("L")
 
 # command line arguments #
 ##########################
@@ -84,9 +85,9 @@ def validate_args(args): # ensures user has given the correct options, and the n
         if not os.path.exists(args.message_file):
             exit("error: message file does not exist")
 
-        if not os.path.exists(args.output_file):
-            print("warning: output image", args.output_file, "already exists. You have 1s to cancel...")
-            time.sleep(1)
+        if os.path.exists(args.output_file):
+            print("warning: output image", args.output_file, "already exists. You have 5s to cancel...")
+            time.sleep(5)
 
 # Image iterating generator thing #
 ###################################
@@ -492,7 +493,7 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
         print(f"Warning: Could not embed the full message. Only part of the message was embedded. Embedded {msg_index / msg_length}% = {msg_index} bits = {msg_index / 8} bytes")
 
     # Save the modified image
-    output_file.save(output_filename)
+    output_file.save(output_filename, "bmp")
     if not quiet_mode: print(f"Output image saved as {output_filename}")
 
 def add_filesize_bits(bitstring):
