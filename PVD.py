@@ -19,12 +19,10 @@ from PIL import Image
 # placeholders for now, will update generator function to do more later
 pixel_pair_mode = "horizontal"
 pixel_iteration_mode = "standard"
-color_mode = "grayscale"
+color_mode = "grayscale" # "grayscale" or "color" - defaults to "grayscale" but can be set in cmdline args
 diff_ranges = [0,8,16,32,64,128,256] # hold indices of where ranges begin/end. First/Last elements should always be 0 and 256
 num_bits_for_size=32 # this many bits will be used in the beginning of the image to determine how many bytes of data should be read
-#                 ^^ 32 bits is enough to handle storing 4GB of secret data, which should be enough
-#                 ^^ 16 bits is enough to store 64KB of secret data
-debug_mode = 0 # set to 1 for on
+debug_mode = 0
 quiet_mode = 0
 
 
@@ -39,6 +37,8 @@ class bitmap:
         self.image = Image.open(filename) # use PIL / Pillow library to read bitmap
         if color_mode == "grayscale":
             self.image = self.image.convert("L")
+        elif color_mode == "color":
+            self.image = self.image.convert("RGB")
 
 # command line arguments #
 ##########################
@@ -62,6 +62,10 @@ def init_commandline_args():
     parser.add_argument("-n", "--dry-run", help="don't hide data, just find capacity for given cover image", action="store_true")
     parser.add_argument("-v", "--verbose", help="print out extra information", action="store_true")
     parser.add_argument("-q", "--quiet", help="don't print out anything", action="store_true")
+    parser.add_argument("--rgb", help="hide in color components (defualts to --gray if unspecified)", action="store_true")
+    parser.add_argument("--gray", help="convert to grayscale and hide only in luminance (defualts to --gray if unspecified)", action="store_true")
+    parser.add_argument("--horizontal", help="use horizontal pixel pairs (defualts to --horizontal if unspecified)", action="store_true")
+    parser.add_argument("--vertical", help="use vertical pixel pairs (defualts to --horizontal if unspecified)", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -71,6 +75,12 @@ def validate_args(args): # ensures user has given the correct options, and the n
             exit("error: image to extract from does not exist")
         else:
             return
+
+    if args.rgb and args.gray:
+        exit("error: you must specify only --rgb or --gray, not both")
+
+    if args.horizontal and args.vertical:
+        exit("error: you must specify only --horizontal or --vertical, not both")
 
     if not args.cover_image: # invalid bc no file given
         exit("error: no cover image specified")
@@ -108,9 +118,14 @@ def pixel_pairs(img): # takes PIL Image object as parameter
         else:
             print("ERROR: pixel iteration mode", pixel_iteration_mode, "not recognized")
     elif pixel_pair_mode == "vertical":
-        print("TODO: implement vertical pixel pairs")
-        #TODO
-        exit()
+        if pixel_iteration_mode == "standard":
+            # left to right first, then top to bottom (like reading)
+            # only do odd number x values, then the pair of pixels is x-1,y  x,y
+            for y in range(1,size_y,2):
+                for x in range(size_x): # start with 1, go by twos. gives us only odd numbers.
+                    yield ((x, y-1), (x, y))
+        else:
+            print("ERROR: pixel iteration mode", pixel_iteration_mode, "not recognized")
     else:
         print("ERROR: pixel pair mode", pixel_pair_mode, "not recognized")
         exit()
@@ -176,16 +191,23 @@ def extract_data(steg_image):
     bytes_to_read = 0 # will change later
 
     for pixel_coords_1, pixel_coords_2 in pixel_pairs(steg_image):
-        pixel1=steg_image.getpixel(pixel_coords_1)
-        pixel2=steg_image.getpixel(pixel_coords_2)
-
         # break when we've read all the message bits #
         ##############################################
         if len(bits) > num_bits_for_size and not bytes_to_read: # wait to determine msg size until we've read enough bits
             bytes_to_read = int(bits[0:num_bits_for_size],2)
         if bytes_to_read and len(bits) >= (8*bytes_to_read + num_bits_for_size): #
             break
+
+        if debug_mode and not quiet_mode: print(f"[dbg] in extract_data(), color_mode is {color_mode}")
         if color_mode == "grayscale":
+            pixel_components = [[steg_image.getpixel(pixel_coords_1),steg_image.getpixel(pixel_coords_2)]]
+        elif color_mode == "color":
+            pixel_components = [[steg_image.getpixel(pixel_coords_1)[0],steg_image.getpixel(pixel_coords_2)[0]], [steg_image.getpixel(pixel_coords_1)[1],steg_image.getpixel(pixel_coords_2)[1]], [steg_image.getpixel(pixel_coords_1)[2],steg_image.getpixel(pixel_coords_2)[2]]]
+        else:
+            print("ERROR: color mode unrecognized:", color_mode)
+            exit()
+        
+        for pixel1, pixel2 in pixel_components:
             # find difference range for pixel pair
             # and also check if valid pixel pair
             #######################################
@@ -195,7 +217,7 @@ def extract_data(steg_image):
             # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
-                if not quiet_mode: print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
+                if not quiet_mode: print("skipping pair:", pixel1, pixel2, "diff =", diff, "possible vals =", pixel_pair_possible_vals, "(not in [0..255])")
                 continue
 
             # find capacity and get msg bits
@@ -227,6 +249,12 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
         if msg_index >= msg_length:
             break
         if color_mode == "grayscale":
+            pixel_components = [[cover_image.getpixel(pixel_coords_1),cover_image.getpixel(pixel_coords_2)]]
+        elif color_mode == "color":
+            pixel_components = [[cover_image.getpixel(pixel_coords_1)[0],cover_image.getpixel(pixel_coords_2)[0]], [cover_image.getpixel(pixel_coords_1)[1],cover_image.getpixel(pixel_coords_2)[1]], [cover_image.getpixel(pixel_coords_1)[2],cover_image.getpixel(pixel_coords_2)[2]]]
+        
+        new_vals = []
+        for pixel1, pixel2 in pixel_components:
             # find difference range for pixel pair
             # and also check if valid pixel pair
             #######################################
@@ -236,258 +264,44 @@ def embed_data_into_image(cover_image, message_bits, output_filename):
             # from the paper. determine if pixelpair should be skipped:
             if pixel_pair_possible_vals[0] < 0 or pixel_pair_possible_vals[0] > 255 or pixel_pair_possible_vals[1] < 0 or pixel_pair_possible_vals[1] > 255:
                 # invalid pair
-                if not quiet_mode: print("skipping pair:", pixel1, pixel2, "diff =", diff, "range =", diff_range, "possible vals =", pixel_pair_possible_vals)
+                if not quiet_mode: print("skipping pair:", pixel1, pixel2, "diff =", diff, "possible vals =", pixel_pair_possible_vals, "(not in [0..255])")
+                new_vals.append([pixel1,pixel2])
                 continue
-
+ 
             # find capacity and get msg bits
             #################################
-
+ 
             capacity = get_embedding_capacity(diff)
             old_msg_index = msg_index # set lower boundary as last time's upper boundary+1
             msg_index += capacity # set upper boundary as lower boundary + capacity
             if msg_index > msg_length: # if no more bits, just get the rest of them
                 msg_index = msg_length + 1
-
+ 
             bits_to_embed = message_bits[old_msg_index:msg_index]
             if len(bits_to_embed) < capacity: # if not enough bits, add zeros
                 bits_to_embed = bits_to_embed.ljust(capacity, '0')
-
+ 
             bits_value = int(bits_to_embed, 2)
             if debug_mode and not quiet_mode: print(f"[dbg] coords are {pixel_coords_1}, {pixel_coords_2}")
             if debug_mode and not quiet_mode: print(f"[dbg] old_msg_index={old_msg_index} - Embedding bits {bits_to_embed} as {bits_value} , value is {pixel1} and {pixel2} before mod")
-
+ 
             # find new difference / pixel vals
             ###################################
             new_diff = diff_range[bits_value]
-            new_vals = grayscale_new_vals((pixel1, pixel2), new_diff, diff)
-            if debug_mode and not quiet_mode: print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[0]} and {new_vals[1]}")
-
-            # embed bits into output img
-            #############################
-            pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
-            pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
-            if debug_mode and not quiet_mode: print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2), end="\n\n")
-
-        else: # not grayscale
-                # Calculate differences for each color channel
-            diff_r = (pixel1[0] - pixel2[0])
-            diff_g = (pixel1[1] - pixel2[1])
-            diff_b = (pixel1[2] - pixel2[2])
-
-            # Determine embedding capacity based on the difference
-            capacity_r = get_embedding_capacity(diff_r)
-            capacity_g = get_embedding_capacity(diff_g)
-            capacity_b = get_embedding_capacity(diff_b)
-
-            # Embed data into the differences sequentially
-            # pixels have their dif
-            if msg_index < msg_length and capacity_r > 0:
-                bits_to_embed = message_bits[msg_index:msg_index + capacity_r]
-                if len(bits_to_embed) < capacity_r:
-                    bits_to_embed = bits_to_embed.ljust(capacity_r, '0')
-                bits_value = int(bits_to_embed, 2)
-                msg_index += capacity_r
-                if debug_mode and not quiet_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into R-channel, value is {pixel1[0]} and {pixel2[0]} before mod")
+            new_vals.append(grayscale_new_vals((pixel1, pixel2), new_diff, diff))
+            if debug_mode and not quiet_mode: print(f"[dbg] -> changing difference from {diff} to {new_diff}. New vals are {new_vals[-1][0]} and {new_vals[-1][1]}")
 
 
-                x = get_log2(abs(diff_r))
-                new_abs_diff = (2 ** x) + bits_value
-                total_change = new_abs_diff - abs(diff_r)
-                print(f"Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_r)} to {new_abs_diff} for a total change of {total_change}")
-
-                # If total_change is positive then the difference between the 2 channel values needs to go up.
-                while total_change >= 1:
-
-                    if total_change % 2 == 0: 
-                        if pixel1[0] >= pixel2[0]:
-                            if pixel1[0] < 255: 
-                                pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
-                            elif pixel2[0] > 0:
-                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-                        else:
-                            if pixel2[0] < 255: 
-                                pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-                            elif pixel1[0] > 0: 
-                                pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                    else: 
-                        if pixel1[0] >= pixel2[0]:
-                            if pixel2[0] > 0: 
-                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-                            elif pixel1[0] < 255:
-                                pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
-                        else:
-                            if pixel1[0] > 0: 
-                                pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                            elif pixel2[0] < 255: 
-                                pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-
-                    total_change -= 1
-
-                while total_change <= -1:
-
-                    if total_change % 2 == 0:
-                        if pixel1[0] > pixel2[0]:
-                            if pixel1[0] > 0:
-                                pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                            elif pixel2[0] < 255:
-                                pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-                        else:
-                            if pixel2[0] > 0:
-                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-                            elif pixel1[0] < 255:
-                                pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
-                    else:
-                        if pixel1[0] > pixel2[0]:
-                            if pixel2[0] < 255:
-                                pixel2 = (pixel2[0] + 1, pixel2[1], pixel2[2])
-                            elif pixel1[0] > 0:
-                                pixel1 = (pixel1[0] - 1, pixel1[1], pixel1[2])
-                        else:
-                            if pixel1[0] < 255:
-                                pixel1 = (pixel1[0] + 1, pixel1[1], pixel1[2])
-                            elif pixel2[0] > 0:
-                                pixel2 = (pixel2[0] - 1, pixel2[1], pixel2[2])
-
-                    total_change += 1
-
-                print(f"value is {pixel1[0]} and {pixel2[0]} after mod")
-
-            if msg_index < msg_length and capacity_g > 0:
-                bits_to_embed = message_bits[msg_index:msg_index + capacity_g]
-                if len(bits_to_embed) < capacity_g:
-                    bits_to_embed = bits_to_embed.ljust(capacity_g, '0')
-                bits_value = int(bits_to_embed, 2)
-                msg_index += capacity_g
-
-                print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into G-channel, value is {pixel1[1]} and {pixel2[1]} before mod")
-
-                x = get_log2(abs(diff_g))
-                new_abs_diff = (2 ** x) + bits_value
-                total_change = new_abs_diff - abs(diff_g)
-                print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_g)} to {new_abs_diff} for a total change of {total_change}")
-
-                while total_change >= 1:
-                    if total_change % 2 == 0:
-                        if pixel1[1] >= pixel2[1]:
-                            if pixel1[1] < 255:
-                                pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
-                            elif pixel2[1] > 0:
-                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                        else:
-                            if pixel2[1] < 255:
-                                pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-                            elif pixel1[1] > 0:
-                                pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                    else:
-                        if pixel1[1] >= pixel2[1]:
-                            if pixel2[1] > 0:
-                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                            elif pixel1[1] < 255:
-                                pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
-                        else:
-                            if pixel1[1] > 0:
-                                pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                            elif pixel2[1] < 255:
-                                pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-
-                    total_change -= 1
-
-                while total_change <= -1:
-
-                    if total_change % 2 == 0:
-                        if pixel1[1] > pixel2[1]:
-                            if pixel1[1] > 0:
-                                pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                            elif pixel2[1] < 255:
-                                pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-                        else:
-                            if pixel2[1] > 0:
-                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-                            elif pixel1[1] < 255:
-                                pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
-                    else:
-                        if pixel1[1] > pixel2[1]:
-                            if pixel2[1] < 255:
-                                pixel2 = (pixel2[0], pixel2[1] + 1, pixel2[2])
-                            elif pixel1[1] > 0:
-                                pixel1 = (pixel1[0], pixel1[1] - 1, pixel1[2])
-                        else:
-                            if pixel1[1] < 255:
-                                pixel1 = (pixel1[0], pixel1[1] + 1, pixel1[2])
-                            elif pixel2[1] > 0:
-                                pixel2 = (pixel2[0], pixel2[1] - 1, pixel2[2])
-
-                    total_change += 1
-                print(f"value is {pixel1[1]} and {pixel2[1]} after mod")
-
-            if msg_index < msg_length and capacity_b > 0:
-                bits_to_embed = message_bits[msg_index:msg_index + capacity_b]
-                if len(bits_to_embed) < capacity_b:
-                    bits_to_embed = bits_to_embed.ljust(capacity_b, '0')
-                bits_value = int(bits_to_embed, 2)
-                msg_index += capacity_b
-
-                if debug_mode: print(f"[dbg] Embedding bits {bits_to_embed} as {bits_value} into B-channel, value is {pixel1[2]} and {pixel2[2]} before mod")
-
-                x = get_log2(abs(diff_b))
-                new_abs_diff = (2 ** x) + bits_value
-                total_change = new_abs_diff - abs(diff_b)
-                if debug_mode: print(f"[dbg] Log index is {x} at 2^x = {2 ** x} and diff goes from {abs(diff_b)} to {new_abs_diff} for a total change of {total_change}")
-
-                while total_change >= 1:
-                    if total_change % 2 == 0: 
-                        if pixel1[2] >= pixel2[2]:
-                            if pixel1[2] < 255: 
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                            elif pixel2[2] > 0:
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-                        else:
-                            if pixel2[2] < 255: 
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-                            elif pixel1[2] > 0: 
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                    else: 
-                        if pixel1[2] >= pixel2[2]:
-                            if pixel2[2] > 0: 
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-                            elif pixel1[2] < 255:
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                        else:
-                            if pixel1[2] > 0: 
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                            elif pixel2[2] < 255: 
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-
-                    total_change -= 1
-
-                while total_change <= -1:
-
-                    if total_change % 2 == 0:
-                        if pixel1[2] > pixel2[2]:
-                            if pixel1[2] > 0:
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                            elif pixel2[2] < 255:
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-                        else:
-                            if pixel2[2] > 0:
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-                            elif pixel1[2] < 255:
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                    else:
-                        if pixel1[2] > pixel2[2]:
-                            if pixel2[2] < 255:
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] + 1)
-                            elif pixel1[2] > 0:
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] - 1)
-                        else:
-                            if pixel1[2] < 255:
-                                pixel1 = (pixel1[0], pixel1[1], pixel1[2] + 1)
-                            elif pixel2[2] > 0:
-                                pixel2 = (pixel2[0], pixel2[1], pixel2[2] - 1)
-
-                    total_change += 1
-                print(f"value is {pixel1[2]} and {pixel2[2]} after mod")
-                print("")
+ 
+        # embed bits into output img
+        #############################
+        if color_mode == "grayscale":
+            new_vals = new_vals[0]
+        elif color_mode == "color":
+            new_vals = (tuple([x[0] for x in new_vals]), tuple([x[1] for x in new_vals]))
+        pixels[pixel_coords_1[0], pixel_coords_1[1]] = new_vals[0]
+        pixels[pixel_coords_2[0], pixel_coords_2[1]] = new_vals[1]
+        if debug_mode and not quiet_mode: print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2), end="\n\n")
 
     if msg_index < msg_length:
         print(f"Warning: Could not embed the full message. Only part of the message was embedded. Embedded {msg_index / msg_length}% = {msg_index} bits = {msg_index / 8} bytes")
@@ -522,6 +336,8 @@ def add_filesize_bits(bitstring):
 
 
 def main():
+    global color_mode
+    global pixel_pair_mode
     args = init_commandline_args()
     validate_args(args) # will exit if invalid args
 
@@ -531,6 +347,16 @@ def main():
     if args.quiet:
         global quiet_mode
         quiet_mode = 1
+
+    if args.vertical:
+        pixel_pair_mode = "vertical"
+    if args.horizontal:
+        pixel_pair_mode = "horizontal"
+
+    if args.rgb:
+        color_mode = "color"
+    elif args.gray:
+        color_mode = "grayscale"
 
     if args.extract_image:
         steg_image = bitmap(args.extract_image)
