@@ -30,21 +30,22 @@ python3 PVD.py -c ./test-images/lena.bmp --rgb -m ./test-messages/small-msg.txt 
 ## Examples
 ### Black and White embedded with `"A"`s
 Original Image:
-![[lena_bw_cover.png]]
+![black and white image with no data embedded](example-images/lena_bw_cover.png)
 
 Image embedded with about 50,898 `"A"` characters:
-![[lena_bw_embedded-with-As.png]]
+![black and white image embedded with "A"s](example-images/lena_bw_embedded-with-As.png)
 
 Difference between cover image and stego image (difference scaled up by 10):
-![[lena_bw_emdedded-with-As-difference.png]]
-- (ie, `this_img[1,1] = 10 * abs(cover_img[1,1] - stego_img[1,1])` )
+![picture demonstrating difference between black and white cover image and one embedded with "A"s](example-images/lena_bw_emdedded-with-As-difference.png)
+ - (ie, `this_img[1,1] = 10 * abs(cover_img[1,1] - stego_img[1,1])` )
+ - you can see here that the entire capacity is maxed out
 ### Color embedded with Bee Movie script
 Original Image:
-![[lena_color_cover.png]]
+![color image with no data embedded](example-images/lena_color_cover.png)
 
 Image embedded with bee movie script:
-![[lena_color_embedded-with-bee-movie.png]]
+![color image embded with the bee movie script](example-images/lena_color_embedded-with-bee-movie.png)
 
 Difference between cover image and stego image (difference scaled up by 10):
-![[lena_color_embedded-with-bee-movie-difference.png]]
-
+![picture demonstrating difference between color cover image and one embedded with the bee movie script](example-images/lena_color_embedded-with-bee-movie-difference.png)
+ - you can see here that only about 30% of the capacity is used
