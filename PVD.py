@@ -276,7 +276,7 @@ def embed_data_into_image(cover_image, message_bits, output_filename, key=None):
         if debug_mode and not quiet_mode: print("[dbg] embedded into image: pxl1", output_file.getpixel(pixel_coords_1), "pxl2", output_file.getpixel(pixel_coords_2), end="\n\n")
 
     if msg_index < msg_length:
-        print(f"Warning: Could not embed the full message. Only part of the message was embedded. Embedded {msg_index / msg_length}% = {msg_index} bits = {msg_index / 8} bytes")
+        print(f"Warning: Could not embed the full message. Only part of the message was embedded. Embedded {msg_index / msg_length * 100}% = {msg_index} bits = {msg_index / 8} bytes")
 
     # Save the modified image
     output_file.save(output_filename, "bmp")
