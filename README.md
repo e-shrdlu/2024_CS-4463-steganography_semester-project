@@ -44,6 +44,8 @@ python3 PVD.py -c ./test-images/lena.bmp --rgb -m ./test-messages/small-msg.txt 
 ```
 
 ## Examples
+In the following examples, you shouldn't be able to see much of a difference from the cover image to the stego image (hopefully). This is because much of the alterations take place in regions that change is already taking place, making it difficult to spot. You can see this playing out below: in the images below demonstrating the differences from cover- to stego- images, you will see the outlines of the subject. These are regions of relativley large change between pixels.
+
 ### Black and White embedded with `"A"`s
 #### Original Image:
 ![black and white image with no data embedded](example-images/lena_bw_cover.png)
