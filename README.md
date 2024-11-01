@@ -1,4 +1,4 @@
-# 2024_CS-4463-steganography_semester-project
+# PVD Steganography
 
 ## Overview
 Pixel Value Differencing steganography project, using "A steganographic method for images by pixel-value differencing" by Da-Chun Wua and Wen-Hsiang Tsai (2002) as a guide
